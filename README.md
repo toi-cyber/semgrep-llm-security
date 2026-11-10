@@ -9,7 +9,9 @@ text reaching the trusted instruction channel, model output reaching a dangerous
 sink, agents wired to shell/DB/HTTP with no guard. These rules find those
 boundaries in source, before they ship.
 
-Mapped to the [OWASP Top 10 for LLM Applications (2025)](https://genai.owasp.org/llm-top-10/).
+Covers both **LLM application code** and **MCP (Model Context Protocol) servers**,
+mapped to the [OWASP Top 10 for LLM Applications (2025)](https://genai.owasp.org/llm-top-10/)
+and the [OWASP MCP Top 10 (Beta)](https://owasp.org/www-project-mcp-top-10/).
 
 ## Why
 
@@ -44,6 +46,27 @@ that originates from an LLM call actually reaches the sink, which keeps false
 positives low (e.g. parameterised SQL with a model value as a bound parameter
 is *not* flagged — see `tests/`).
 
+### MCP server rules
+
+MCP (Model Context Protocol) "tools" are ordinary `@mcp.tool()`-decorated
+functions, and their arguments are caller-controlled — so an argument reaching a
+dangerous sink is attacker-controlled. These rules scope the taint source to MCP
+tool parameters. Mapped to the [OWASP MCP Top 10 (Beta)](https://owasp.org/www-project-mcp-top-10/).
+
+| Rule ID | Severity | OWASP MCP | What it catches |
+|---|---|---|---|
+| `mcp-tool-arg-command-injection` | ERROR | MCP05 | Tool argument into `os.system`/`subprocess shell=True`/`eval`/`exec` → RCE |
+| `mcp-tool-arg-sql-injection` | ERROR | MCP05 | Tool argument built into a SQL query string → SQLi |
+| `mcp-tool-arg-ssrf` | WARNING | MCP05 | Tool argument used as a request URL → SSRF (cf. Grafana MCP CVE-2026-19516) |
+| `mcp-tool-arg-path-traversal` | WARNING | MCP05 | Tool argument used as a file path with no validation → traversal |
+| `mcp-tool-dynamic-description` | WARNING | MCP03 | Tool description built from dynamic/untrusted input → tool-poisoning surface |
+| `mcp-http-transport-exposed` | WARNING | MCP07 | Server bound to `0.0.0.0` over http/sse with no auth |
+| `mcp-hardcoded-secret` | WARNING | MCP01 | Secret-shaped literal hardcoded in server source |
+
+Static analysis catches *server-source* flaws; it cannot judge whether a static
+tool description is malicious (runtime/model concern) nor find SDK-internal bugs
+(use dependency/version checks for those) — see `docs/design-ja.md`.
+
 ## Try it
 
 ```bash
@@ -52,6 +75,8 @@ semgrep --config rules/ examples/vulnerable_support_bot.py
 
 `examples/vulnerable_support_bot.py` is an intentionally vulnerable demo bot that
 trips four rules at once; use it as a target and as a before/after for write-ups.
+`examples/vulnerable_mcp_server.py` is the equivalent for the MCP rules (7
+findings). Both are intentionally vulnerable — do not deploy them.
 
 ## Develop
 

@@ -1,0 +1,143 @@
+rules:
+  # =========================================================================
+  # MCP tool handlers: a caller controls the arguments of any @mcp.tool()
+  # function, so an argument flowing into a dangerous sink is attacker-
+  # controlled. Source = a parameter of a function decorated with @*.tool(...)
+  # (verified to scope correctly in Semgrep taint mode).
+  # Maps to OWASP MCP Top 10 (Beta) MCP05 Command Injection & Execution.
+  # =========================================================================
+
+  - id: mcp-tool-arg-command-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      An MCP tool handler passes its argument into a command-execution sink
+      (os.system / subprocess shell=True / eval / exec / os.popen). Tool
+      arguments are caller-controlled, so this is remote code execution. Never
+      pass tool input to a shell; use argument vectors (shell=False) against an
+      allow-list of commands.
+    metadata:
+      category: security
+      technology: [mcp, llm]
+      confidence: HIGH
+      owasp-mcp: ["MCP05:2025 Command Injection & Execution"]
+      owasp-llm: ["LLM06:2025 Excessive Agency"]
+      cwe: ["CWE-78: OS Command Injection", "CWE-94: Code Injection"]
+      references:
+        - https://owasp.org/www-project-mcp-top-10/
+    pattern-sources:
+      - patterns:
+          - pattern: |
+              @$MCP.tool(...)
+              def $F(..., $SRC, ...):
+                  ...
+          - focus-metavariable: $SRC
+    pattern-sinks:
+      - pattern-either:
+          - pattern: os.system(...)
+          - pattern: subprocess.$M(..., shell=True, ...)
+          - pattern: eval(...)
+          - pattern: exec(...)
+          - pattern: os.popen(...)
+
+  - id: mcp-tool-arg-sql-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      An MCP tool handler builds a SQL query from its argument. Tool input is
+      caller-controlled, so string-concatenated SQL is SQL injection. Pass tool
+      arguments only as bound parameters, never build the query string.
+    metadata:
+      category: security
+      technology: [mcp, llm, sql]
+      confidence: HIGH
+      owasp-mcp: ["MCP05:2025 Command Injection & Execution"]
+      cwe: ["CWE-89: SQL Injection"]
+      references:
+        - https://owasp.org/www-project-mcp-top-10/
+    pattern-sources:
+      - patterns:
+          - pattern: |
+              @$MCP.tool(...)
+              def $F(..., $SRC, ...):
+                  ...
+          - focus-metavariable: $SRC
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CUR.execute($Q, ...)
+              - pattern: $CUR.execute($Q)
+              - pattern: $CUR.executescript($Q)
+              - pattern: sqlalchemy.text($Q)
+              - pattern: text($Q)
+          - focus-metavariable: $Q
+
+  - id: mcp-tool-arg-ssrf
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >
+      An MCP tool handler uses its argument as a URL / request target. Tool
+      input is caller-controlled, so this is server-side request forgery
+      (SSRF) — the caller can reach internal addresses or cloud metadata.
+      Validate tool-supplied URLs against an allow-list before fetching.
+    metadata:
+      category: security
+      technology: [mcp, llm, requests, httpx]
+      confidence: MEDIUM
+      owasp-mcp: ["MCP05:2025 Command Injection & Execution"]
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      references:
+        - https://grafana.com/security/security-advisories/cve-2026-19516
+    pattern-sources:
+      - patterns:
+          - pattern: |
+              @$MCP.tool(...)
+              def $F(..., $SRC, ...):
+                  ...
+          - focus-metavariable: $SRC
+    pattern-sanitizers:
+      - pattern: validate_url(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$M($U, ...)
+              - pattern: httpx.$M($U, ...)
+              - pattern: urllib.request.urlopen($U, ...)
+          - focus-metavariable: $U
+
+  - id: mcp-tool-arg-path-traversal
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >
+      An MCP tool handler opens a file path taken from its argument without
+      validation. Tool input is caller-controlled, so this allows path
+      traversal (e.g. ../../etc/passwd). Resolve the path and confirm it stays
+      within an allowed base directory (route it through a validator) before
+      opening.
+    metadata:
+      category: security
+      technology: [mcp, llm]
+      confidence: MEDIUM
+      owasp-mcp: ["MCP05:2025 Command Injection & Execution"]
+      cwe: ["CWE-22: Path Traversal"]
+      references:
+        - https://owasp.org/www-project-mcp-top-10/
+    pattern-sources:
+      - patterns:
+          - pattern: |
+              @$MCP.tool(...)
+              def $F(..., $SRC, ...):
+                  ...
+          - focus-metavariable: $SRC
+    pattern-sanitizers:
+      - pattern: validate_path(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($P, ...)
+              - pattern: open($P)
+          - focus-metavariable: $P

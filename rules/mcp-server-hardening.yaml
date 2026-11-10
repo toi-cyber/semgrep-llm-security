@@ -1,0 +1,70 @@
+rules:
+  # =========================================================================
+  # MCP server configuration / definition smells (non-taint, pattern rules).
+  # =========================================================================
+
+  - id: mcp-tool-dynamic-description
+    languages: [python]
+    severity: WARNING
+    message: >
+      An MCP tool's description is built from a non-literal value (variable,
+      f-string, concatenation, or external input). The model reads tool
+      descriptions as trusted guidance at registration, so a description
+      assembled from dynamic/untrusted data is a tool-poisoning surface. Keep
+      tool descriptions static and reviewed. (Note: this flags the dynamic
+      *surface*; it cannot judge whether a static description is malicious.)
+    metadata:
+      category: security
+      technology: [mcp, llm]
+      confidence: LOW
+      owasp-mcp: ["MCP03:2025 Tool Poisoning"]
+      cwe: ["CWE-77: Command Injection (instruction channel)"]
+      references:
+        - https://arxiv.org/abs/2508.14925
+    patterns:
+      - pattern: "@$MCP.tool(..., description=$X, ...)"
+      - pattern-not: '@$MCP.tool(..., description="...", ...)'
+
+  - id: mcp-http-transport-exposed
+    languages: [python]
+    severity: WARNING
+    message: >
+      An MCP server is served over a network transport (streamable-http / sse)
+      bound to 0.0.0.0. Without authentication this exposes every tool to the
+      network (cf. unauthenticated DB-MCP RCEs). Bind to localhost, or require
+      authentication / an allow-list before exposing tools over the network.
+    metadata:
+      category: security
+      technology: [mcp, llm]
+      confidence: MEDIUM
+      owasp-mcp: ["MCP07:2025 Insufficient Authentication & Authorization"]
+      cwe: ["CWE-306: Missing Authentication for Critical Function"]
+      references:
+        - https://owasp.org/www-project-mcp-top-10/
+    patterns:
+      - pattern: $MCP.run(...)
+      - pattern: $MCP.run(..., host="0.0.0.0", ...)
+      - pattern-either:
+          - pattern: $MCP.run(..., transport="streamable-http", ...)
+          - pattern: $MCP.run(..., transport="sse", ...)
+
+  - id: mcp-hardcoded-secret
+    languages: [python]
+    severity: WARNING
+    message: >
+      A secret-shaped literal (API key / token) is hardcoded in the server
+      source. Load secrets from the environment or a secret manager; never
+      commit them.
+    metadata:
+      category: security
+      technology: [mcp, llm]
+      confidence: MEDIUM
+      owasp-mcp: ["MCP01:2025 Token Mismanagement & Secret Exposure"]
+      cwe: ["CWE-798: Use of Hard-coded Credentials"]
+      references:
+        - https://owasp.org/www-project-mcp-top-10/
+    patterns:
+      - pattern: $K = $V
+      - metavariable-regex:
+          metavariable: $V
+          regex: ^["'](sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AIza[\w\-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})["']$
