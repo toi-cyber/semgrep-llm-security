@@ -1,0 +1,29 @@
+# Test fixture for rules/github-actions-agent-injection.yaml
+name: demo
+on: pull_request_target
+
+jobs:
+  vulnerable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: echo title (direct interpolation)
+        # ruleid: gha-untrusted-event-in-run
+        run: echo "PR title is ${{ github.event.pull_request.title }}"
+
+      - name: echo body (direct interpolation)
+        # ruleid: gha-untrusted-event-in-run
+        run: |
+          echo "body: ${{ github.event.issue.body }}"
+
+  safe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: echo title via env (safe)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        # ok: gha-untrusted-event-in-run
+        run: echo "PR title is $PR_TITLE"
+
+      - name: static run (safe)
+        # ok: gha-untrusted-event-in-run
+        run: echo "hello world"

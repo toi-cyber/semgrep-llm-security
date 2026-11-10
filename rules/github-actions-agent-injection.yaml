@@ -1,0 +1,33 @@
+rules:
+  # =========================================================================
+  # GitHub Actions "script injection": untrusted, attacker-controllable event
+  # text (PR title/body, issue, comment, review) interpolated directly into a
+  # run: step. On a pull_request_target workflow this step also has repo
+  # secrets in scope, which is the "Comment-and-Control" class: a PR title can
+  # steer a CI step (or a CI AI agent) into leaking secrets. Fix: pass the
+  # value through env: and reference it as a quoted shell variable, never
+  # interpolate ${{ github.event.* }} straight into the script.
+  # =========================================================================
+  - id: gha-untrusted-event-in-run
+    languages: [yaml]
+    severity: ERROR
+    message: >
+      Untrusted GitHub event text (github.event.pull_request.title/body,
+      issue, comment, or review) is interpolated directly into a `run:` step.
+      This is shell script injection; on a pull_request_target workflow the
+      step also holds repo secrets, enabling the "Comment-and-Control" secret
+      leak. Pass the value via `env:` and reference it as a quoted variable
+      ("$VAR"); never splice ${{ github.event.* }} into the script.
+    metadata:
+      category: security
+      technology: [github-actions, ci, llm]
+      confidence: HIGH
+      cwe: ["CWE-78: OS Command Injection"]
+      owasp-llm: ["LLM01:2025 Prompt Injection"]
+      references:
+        - https://securitylab.github.com/resources/github-actions-untrusted-input/
+    patterns:
+      - pattern: "run: $SCRIPT"
+      - metavariable-regex:
+          metavariable: $SCRIPT
+          regex: (?s).*\$\{\{\s*github\.event\.(pull_request\.(title|body|head\.ref|head\.label)|issue\.(title|body)|comment\.body|review\.body|discussion\.(title|body))
