@@ -1,0 +1,169 @@
+rules:
+  # -------------------------------------------------------------------------
+  # LLM output -> code execution (RCE)
+  # -------------------------------------------------------------------------
+  - id: llm-output-to-code-execution
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Output from an LLM flows into a code-execution sink (eval / exec /
+      os.system / subprocess with shell=True / pickle.loads). A prompt-injected
+      or otherwise manipulated model response becomes remote code execution.
+      Never execute model output. If the model must trigger actions, map its
+      output to an allow-list of pre-defined, parameterised operations.
+    metadata:
+      category: security
+      technology: [openai, anthropic, langchain, llm]
+      confidence: MEDIUM
+      owasp-llm:
+        - "LLM05:2025 Improper Output Handling"
+        - "LLM06:2025 Excessive Agency"
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      references:
+        - https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/
+    pattern-sources:
+      - pattern: $CLIENT.chat.completions.create(...)
+      - pattern: $CLIENT.completions.create(...)
+      - pattern: $CLIENT.responses.create(...)
+      - pattern: $CLIENT.messages.create(...)
+      - pattern: openai.ChatCompletion.create(...)
+      - pattern: $CHAIN.run(...)
+      - pattern: $CHAIN.invoke(...)
+      - pattern: $CHAIN.predict(...)
+      - pattern: $LLM.generate(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+          - pattern: os.system(...)
+          - pattern: subprocess.$M(..., shell=True, ...)
+          - pattern: pickle.loads(...)
+
+  # -------------------------------------------------------------------------
+  # LLM output -> SQL query (SQLi)
+  # -------------------------------------------------------------------------
+  - id: llm-output-to-sql-query
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      LLM output flows into a SQL query string. If model text is concatenated or
+      interpolated into SQL, a manipulated response yields SQL injection. Pass
+      model-derived values only as bound parameters, never build the query
+      string from them.
+    metadata:
+      category: security
+      technology: [openai, anthropic, langchain, llm, sql]
+      confidence: MEDIUM
+      owasp-llm:
+        - "LLM05:2025 Improper Output Handling"
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      references:
+        - https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/
+    pattern-sources:
+      - pattern: $CLIENT.chat.completions.create(...)
+      - pattern: $CLIENT.completions.create(...)
+      - pattern: $CLIENT.responses.create(...)
+      - pattern: $CLIENT.messages.create(...)
+      - pattern: openai.ChatCompletion.create(...)
+      - pattern: $CHAIN.run(...)
+      - pattern: $CHAIN.invoke(...)
+      - pattern: $CHAIN.predict(...)
+      - pattern: $LLM.generate(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CUR.execute($Q, ...)
+              - pattern: $CUR.execute($Q)
+              - pattern: $CUR.executescript($Q)
+              - pattern: sqlalchemy.text($Q)
+          - focus-metavariable: $Q
+
+  # -------------------------------------------------------------------------
+  # LLM output -> rendered as raw HTML (XSS / Markdown exfiltration)
+  # -------------------------------------------------------------------------
+  - id: llm-output-rendered-as-html
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >
+      LLM output is rendered as raw HTML (Markup / mark_safe /
+      render_template_string / unsafe_allow_html). Model output can contain
+      <script>, event handlers, or a Markdown image whose URL silently
+      exfiltrates the conversation to an attacker. Escape model output, or render
+      Markdown with raw HTML disabled and an allow-list of tags.
+    metadata:
+      category: security
+      technology: [flask, django, streamlit, llm]
+      confidence: MEDIUM
+      owasp-llm:
+        - "LLM05:2025 Improper Output Handling"
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      references:
+        - https://embracethered.com/blog/posts/2023/image-markdown-exfiltration/
+    pattern-sources:
+      - pattern: $CLIENT.chat.completions.create(...)
+      - pattern: $CLIENT.completions.create(...)
+      - pattern: $CLIENT.responses.create(...)
+      - pattern: $CLIENT.messages.create(...)
+      - pattern: openai.ChatCompletion.create(...)
+      - pattern: $CHAIN.run(...)
+      - pattern: $CHAIN.invoke(...)
+      - pattern: $CHAIN.predict(...)
+      - pattern: $LLM.generate(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: markupsafe.Markup(...)
+          - pattern: flask.Markup(...)
+          - pattern: Markup(...)
+          - pattern: django.utils.safestring.mark_safe(...)
+          - pattern: mark_safe(...)
+          - pattern: flask.render_template_string(...)
+          - pattern: render_template_string(...)
+          - patterns:
+              - pattern: st.markdown($X, unsafe_allow_html=True)
+              - focus-metavariable: $X
+
+  # -------------------------------------------------------------------------
+  # LLM output -> server-side request (SSRF via indirect prompt injection)
+  # -------------------------------------------------------------------------
+  - id: llm-output-to-server-side-request
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >
+      LLM output is used as a URL / request target. Via indirect prompt
+      injection an attacker can steer the model's text to internal addresses
+      (SSRF) or attacker-controlled hosts. Validate model-derived URLs against an
+      allow-list before fetching.
+    metadata:
+      category: security
+      technology: [requests, httpx, llm]
+      confidence: MEDIUM
+      owasp-llm:
+        - "LLM06:2025 Excessive Agency"
+      cwe:
+        - "CWE-918: Server-Side Request Forgery (SSRF)"
+      references:
+        - https://genai.owasp.org/llmrisk/llm062025-excessive-agency/
+    pattern-sources:
+      - pattern: $CLIENT.chat.completions.create(...)
+      - pattern: $CLIENT.completions.create(...)
+      - pattern: $CLIENT.responses.create(...)
+      - pattern: $CLIENT.messages.create(...)
+      - pattern: openai.ChatCompletion.create(...)
+      - pattern: $CHAIN.run(...)
+      - pattern: $CHAIN.invoke(...)
+      - pattern: $CHAIN.predict(...)
+      - pattern: $LLM.generate(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$M($URL, ...)
+              - pattern: httpx.$M($URL, ...)
+              - pattern: urllib.request.urlopen($URL, ...)
+          - focus-metavariable: $URL

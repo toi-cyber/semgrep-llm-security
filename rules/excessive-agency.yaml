@@ -1,0 +1,55 @@
+rules:
+  # -------------------------------------------------------------------------
+  # Dangerous agent tool enabled (code / shell execution)
+  # -------------------------------------------------------------------------
+  - id: langchain-dangerous-tool-enabled
+    languages: [python]
+    severity: ERROR
+    message: >
+      A LangChain tool that can execute arbitrary code or shell commands is
+      enabled (PythonREPLTool / ShellTool / the "terminal" or "python_repl"
+      built-ins). Combined with prompt injection this is direct remote code
+      execution. Remove the tool, or sandbox it and require explicit
+      human-in-the-loop approval before each execution.
+    metadata:
+      category: security
+      technology: [langchain, llm, agents]
+      confidence: HIGH
+      owasp-llm:
+        - "LLM06:2025 Excessive Agency"
+      cwe:
+        - "CWE-250: Execution with Unnecessary Privileges"
+      references:
+        - https://genai.owasp.org/llmrisk/llm062025-excessive-agency/
+    pattern-either:
+      - pattern: PythonREPLTool(...)
+      - pattern: PythonAstREPLTool(...)
+      - pattern: ShellTool(...)
+      - pattern: load_tools([..., "terminal", ...], ...)
+      - pattern: load_tools([..., "python_repl", ...], ...)
+
+  # -------------------------------------------------------------------------
+  # Safety guard explicitly disabled
+  # -------------------------------------------------------------------------
+  - id: langchain-allow-dangerous-flag
+    languages: [python]
+    severity: ERROR
+    message: >
+      An allow_dangerous_* flag is set to True, disabling a LangChain safety
+      guard (arbitrary code execution, outbound requests, or pickle
+      deserialization). Only enable this inside a sandbox and behind explicit
+      human approval; otherwise prompt injection escalates straight through it.
+    metadata:
+      category: security
+      technology: [langchain, llm, agents]
+      confidence: HIGH
+      owasp-llm:
+        - "LLM06:2025 Excessive Agency"
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      references:
+        - https://python.langchain.com/docs/security/
+    pattern-either:
+      - pattern: $F(..., allow_dangerous_code=True, ...)
+      - pattern: $F(..., allow_dangerous_requests=True, ...)
+      - pattern: $F(..., allow_dangerous_deserialization=True, ...)

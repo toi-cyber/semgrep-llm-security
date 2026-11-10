@@ -1,0 +1,28 @@
+rules:
+  # -------------------------------------------------------------------------
+  # Runtime values spliced into the system prompt
+  # -------------------------------------------------------------------------
+  - id: user-input-in-system-prompt
+    languages: [python]
+    severity: WARNING
+    message: >
+      The system prompt is assembled with an f-string / concatenation / format,
+      so runtime values are spliced into the trusted instruction channel. If any
+      of those values are user- or document-derived, this is a prompt-injection
+      vector. Keep the system prompt static and pass untrusted data in a clearly
+      delimited user message instead.
+    metadata:
+      category: security
+      technology: [openai, anthropic, llm]
+      confidence: LOW
+      owasp-llm:
+        - "LLM01:2025 Prompt Injection"
+      cwe:
+        - "CWE-77: Improper Neutralization of Special Elements used in a Command ('Command Injection')"
+      references:
+        - https://genai.owasp.org/llmrisk/llm012025-prompt-injection/
+    pattern-either:
+      - pattern: '{"role": "system", "content": f"..."}'
+      - pattern: '{"role": "system", "content": $A + $B}'
+      - pattern: '{"role": "system", "content": "...".format(...)}'
+      - pattern: '{"role": "system", "content": "..." % $X}'
