@@ -6,7 +6,7 @@ topics: ["security", "llm", "semgrep", "appsec", "ai"]
 published: false
 ---
 
-> この記事で作るもの: LLMを組み込んだアプリのソースコードを読んで、危険な書き方を自動で指摘する Semgrep ルール集 **semgrep-llm-security**（リポジトリは末尾にリンク）を紹介します。実際に動かして検証したところまで載せます。
+> この記事で作るもの: LLMを組み込んだアプリのソースコードを読んで、危険な書き方を自動で指摘する Semgrep ルール集 [semgrep-llm-security](https://github.com/toi-cyber/semgrep-llm-security) を紹介します。実際に動かして検証したところまで載せます。
 
 ## はじめに：LLMアプリの穴はどこに出るか
 
@@ -215,7 +215,7 @@ messages = [
 - 危険な配線はコードに現れるので、**静的解析＋taint** で CI の段階で捕まえられる
 - 作った7ルールは OWASP LLM Top10 対応・テスト済み・デモで実証済み
 
-リポジトリはこちら（MIT）。Issue / PR 歓迎です。**（リポジトリ公開後にURLを記載）**
+リポジトリはこちら（MIT・Issue / PR 歓迎）： https://github.com/toi-cyber/semgrep-llm-security
 
 ---
 
